@@ -1,0 +1,213 @@
+################ BASELINE
+$ k get pods
+NAME                        READY   STATUS    RESTARTS   AGE
+backend-684d789546-8bgsg    1/1     Running   0          4m34s
+backend-684d789546-fbvvt    1/1     Running   0          4m47s
+frontend-6dd4db45f4-594px   1/1     Running   0          3m46s
+frontend-6dd4db45f4-9m582   1/1     Running   0          3m51s
+postgres-56bcbd7894-hqq46   1/1     Running   0          22m
+
+$ curl -s -o /dev/null -w '%{http_code}' -H 'Host: expensetrail.local' http://192.168.49.2/api/summary
+200
+
+$ curl -s -o /dev/null -w '%{http_code}' -H 'Host: expensetrail.local' http://192.168.49.2/
+200
+
+################ ISSUE 1: wrong image tag (ErrImagePull / ImagePullBackOff)
+$ k set image deploy/backend backend=expensetrail-backend:v-does-not-exist
+deployment.apps/backend image updated
+
+# SYMPTOM: a new pod that never starts; the old pods are untouched
+$ k get pods -l app=backend
+NAME                       READY   STATUS             RESTARTS   AGE
+backend-684d789546-8bgsg   1/1     Running            0          5m
+backend-684d789546-fbvvt   1/1     Running            0          5m13s
+backend-6bb99796f7-xhnnw   0/1     ImagePullBackOff   0          25s
+
+# INVESTIGATE the broken pod (backend-6bb99796f7-xhnnw): its events say why
+$ kubectl -n expensetrail describe pod backend-6bb99796f7-xhnnw | sed -n '/^Events:/,$p' | cut -c1-170
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  25s                default-scheduler  Successfully assigned expensetrail/backend-6bb99796f7-xhnnw to minikube
+  Normal   BackOff    21s                kubelet            spec.containers{backend}: Back-off pulling image "expensetrail-backend:v-does-not-exist"
+  Warning  Failed     21s                kubelet            spec.containers{backend}: Error: ImagePullBackOff
+  Normal   Pulling    11s (x2 over 23s)  kubelet            spec.containers{backend}: Pulling image "expensetrail-backend:v-does-not-exist"
+  Warning  Failed     9s (x2 over 21s)   kubelet            spec.containers{backend}: Failed to pull image "expensetrail-backend:v-does-not-exist": failed to pull and unp
+  Warning  Failed     9s (x2 over 21s)   kubelet            spec.containers{backend}: Error: ErrImagePull
+
+# the rolling update kept the old pods serving, so users saw no outage:
+$ curl -s -o /dev/null -w '%{http_code}' -H 'Host: expensetrail.local' http://192.168.49.2/api/summary
+200
+
+# ROOT CAUSE: the image tag does not exist. FIX: roll the Deployment back
+$ k rollout undo deploy/backend
+deployment.apps/backend rolled back
+
+deployment "backend" successfully rolled out
+$ k get pods -l app=backend
+NAME                       READY   STATUS        RESTARTS   AGE
+backend-684d789546-8bgsg   1/1     Running       0          5m3s
+backend-684d789546-fbvvt   1/1     Running       0          5m16s
+backend-6bb99796f7-xhnnw   0/1     Terminating   0          28s
+
+$ curl -H 'Host: expensetrail.local' http://192.168.49.2/api/summary   # polled until 200 (max 45s)
+200 (after ~3s)
+
+################ ISSUE 2: wrong database password (pods Running but never Ready)
+$ k patch secret expensetrail-db -p '{"data":{"password":"<redacted-base64>"}}'
+secret/expensetrail-db patched
+
+$ k rollout restart deploy/backend
+deployment.apps/backend restarted
+
+# SYMPTOM: READY 0/1 on the new pod, RESTARTS 0 (the process itself is fine)
+$ k get pods -l app=backend
+NAME                       READY   STATUS    RESTARTS   AGE
+backend-54fdccb5dc-d7l6z   0/1     Running   0          33s
+backend-684d789546-8bgsg   1/1     Running   0          5m42s
+backend-684d789546-fbvvt   1/1     Running   0          5m55s
+
+# INVESTIGATE the not-ready pod (backend-54fdccb5dc-d7l6z): events
+$ kubectl -n expensetrail describe pod backend-54fdccb5dc-d7l6z | sed -n '/^Events:/,$p' | cut -c1-170
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  33s                default-scheduler  Successfully assigned expensetrail/backend-54fdccb5dc-d7l6z to minikube
+  Normal   Pulled     21s                kubelet            spec.containers{backend}: Container image "expensetrail-backend:dev" already present on machine and can be acc
+  Normal   Created    16s                kubelet            spec.containers{backend}: Container created
+  Normal   Started    16s                kubelet            spec.containers{backend}: Container started
+  Warning  Unhealthy  15s (x2 over 16s)  kubelet            spec.containers{backend}: Readiness probe failed: Get "http://10.244.0.43:8000/ready": dial tcp 10.244.0.43:80
+  Warning  Unhealthy  5s (x2 over 10s)   kubelet            spec.containers{backend}: Readiness probe failed: HTTP probe failed with statuscode: 503
+
+# ask THAT pod's app directly (not just any backend pod):
+$ kubectl -n expensetrail exec backend-54fdccb5dc-d7l6z -- python -c "import urllib.request,urllib.error
+try: print(urllib.request.urlopen('http://localhost:8000/ready').status)
+except urllib.error.HTTPError as e: print(e.code, e.read().decode())"
+503 {"detail":"database unavailable"}
+
+# and test the database login exactly as the app does:
+$ kubectl -n expensetrail exec backend-54fdccb5dc-d7l6z -- python -c "import os,psycopg2
+try:
+    psycopg2.connect(os.environ['DATABASE_URL']); print('connected')
+except Exception as e: print(str(e).strip())"
+connection to server at "postgres" (10.102.92.13), port 5432 failed: FATAL:  password authentication failed for user "expense"
+
+# ROOT CAUSE: the Secret no longer matches the password PostgreSQL was initialised with. FIX: restore the Secret, restart
+$ k patch secret expensetrail-db -p '{"data":{"password":"<redacted-base64>"}}'
+secret/expensetrail-db patched
+
+$ k rollout restart deploy/backend
+deployment.apps/backend restarted
+
+deployment "backend" successfully rolled out
+$ k get pods -l app=backend
+NAME                       READY   STATUS        RESTARTS   AGE
+backend-684d789546-fbvvt   1/1     Terminating   0          6m18s
+backend-75d6475c95-cnzk2   1/1     Running       0          21s
+backend-75d6475c95-npqt9   1/1     Running       0          12s
+
+$ curl -H 'Host: expensetrail.local' http://192.168.49.2/api/summary   # polled until 200 (max 45s)
+200 (after ~3s)
+
+################ ISSUE 3: Service selector typo (no endpoints, ingress returns 503)
+$ k patch svc backend -p '{"spec":{"selector":{"app":"backend-typo"}}}'
+service/backend patched
+
+# SYMPTOM
+$ curl -s -o /dev/null -w '%{http_code}' -H 'Host: expensetrail.local' http://192.168.49.2/api/summary
+503
+
+# INVESTIGATE: the pods are healthy, but the Service has no endpoints
+$ k get pods -l app=backend
+NAME                       READY   STATUS    RESTARTS   AGE
+backend-75d6475c95-cnzk2   1/1     Running   0          27s
+backend-75d6475c95-npqt9   1/1     Running   0          18s
+
+$ k get endpoints backend
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME      ENDPOINTS   AGE
+backend   <none>      24m
+
+$ k describe svc backend | grep -E 'Selector|Endpoints'
+Selector:                 app=backend-typo
+Endpoints:                
+
+$ k get pods --show-labels -l app=backend | cut -c1-120
+NAME                       READY   STATUS    RESTARTS   AGE   LABELS
+backend-75d6475c95-cnzk2   1/1     Running   0          27s   app=backend,pod-template-hash=75d6475c95
+backend-75d6475c95-npqt9   1/1     Running   0          18s   app=backend,pod-template-hash=75d6475c95
+
+# ROOT CAUSE: selector app=backend-typo matches no Pod labels. FIX: restore the selector
+$ k patch svc backend -p '{"spec":{"selector":{"app":"backend"}}}'
+service/backend patched
+
+$ k get endpoints backend
+Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice
+NAME      ENDPOINTS                           AGE
+backend   10.244.0.44:8000,10.244.0.45:8000   24m
+
+$ curl -H 'Host: expensetrail.local' http://192.168.49.2/api/summary   # polled until 200 (max 45s)
+200 (after ~9s)
+
+################ ISSUE 4: readiness probe pointing at a path that fails (rollout stuck)
+# (my first attempt used /healthz-missing: it PASSED, because nginx's SPA fallback 'try_files $uri /index.html' serves 200 for
+#  any unknown path. A probe that really fails must go through /api, where the backend returns 404.)
+$ k patch deploy frontend --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/path","value":"/api/does-not-exist"}]'
+deployment.apps/frontend patched
+
+# SYMPTOM: the new pod is 0/1 while the old pods keep serving; the rollout never finishes
+$ k get pods -l app=frontend
+NAME                        READY   STATUS    RESTARTS   AGE
+frontend-6dd4db45f4-594px   1/1     Running   0          6m
+frontend-6dd4db45f4-9m582   1/1     Running   0          6m5s
+frontend-796774556d-74jq6   0/1     Running   0          30s
+
+$ k rollout status deploy/frontend --timeout=5s
+Waiting for deployment "frontend" rollout to finish: 1 out of 2 new replicas have been updated...
+error: timed out waiting for the condition
+
+# INVESTIGATE the not-ready pod (frontend-796774556d-74jq6): events
+$ kubectl -n expensetrail describe pod frontend-796774556d-74jq6 | sed -n '/^Events:/,$p' | cut -c1-170
+Events:
+  Type     Reason     Age               From               Message
+  ----     ------     ----              ----               -------
+  Normal   Scheduled  36s               default-scheduler  Successfully assigned expensetrail/frontend-796774556d-74jq6 to minikube
+  Normal   Pulled     34s               kubelet            spec.containers{frontend}: Container image "expensetrail-frontend:dev" already present on machine and can be ac
+  Normal   Created    33s               kubelet            spec.containers{frontend}: Container created
+  Normal   Started    33s               kubelet            spec.containers{frontend}: Container started
+  Warning  Unhealthy  2s (x8 over 33s)  kubelet            spec.containers{frontend}: Readiness probe failed: HTTP probe failed with statuscode: 404
+
+$ k get deploy frontend -o jsonpath='{.spec.template.spec.containers[0].readinessProbe.httpGet.path}{"\n"}'
+/api/does-not-exist
+
+# ROOT CAUSE: the probe asks for /api/does-not-exist, which the backend answers with 404, so the pod never becomes Ready. FIX: roll back
+$ k rollout undo deploy/frontend
+deployment.apps/frontend rolled back
+
+deployment "frontend" successfully rolled out
+$ k get pods -l app=frontend
+NAME                        READY   STATUS        RESTARTS   AGE
+frontend-6dd4db45f4-594px   1/1     Running       0          6m9s
+frontend-6dd4db45f4-9m582   1/1     Running       0          6m14s
+frontend-796774556d-74jq6   0/1     Terminating   0          39s
+
+$ curl -H 'Host: expensetrail.local' http://192.168.49.2/   # polled until 200 (max 45s)
+200 (after ~3s)
+
+################ FINAL STATE
+$ k get pods
+NAME                        READY   STATUS      RESTARTS   AGE
+backend-75d6475c95-cnzk2    1/1     Running     0          74s
+backend-75d6475c95-npqt9    1/1     Running     0          65s
+frontend-6dd4db45f4-594px   1/1     Running     0          6m10s
+frontend-6dd4db45f4-9m582   1/1     Running     0          6m15s
+frontend-796774556d-74jq6   0/1     Completed   0          40s
+postgres-56bcbd7894-hqq46   1/1     Running     0          24m
+
+$ curl -s -o /dev/null -w '%{http_code}' -H 'Host: expensetrail.local' http://192.168.49.2/api/summary
+200
+
+$ curl -s -o /dev/null -w '%{http_code}' -H 'Host: expensetrail.local' http://192.168.49.2/
+200
+

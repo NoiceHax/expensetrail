@@ -1,0 +1,31 @@
+=== ExpenseTrail / container image scan (trivy, severity HIGH,CRITICAL) ===
+captured 2026-10-08 00:45 IST on minty@homelab. This is the same scan the CI "images" job runs, with --ignore-unfixed --exit-code 1.
+
+## Backend image (python:3.12-slim + app)
+$ trivy image --severity HIGH,CRITICAL expensetrail-backend
+  44 findings, ALL in Debian OS packages: 43 "affected" + 1 "fix_deferred" (no fixed version published yet)
+$ trivy image --severity HIGH,CRITICAL --ignore-unfixed expensetrail-backend
+  0 findings  -> the CI gate passes.
+  The Dockerfile already runs `apt-get upgrade`, which applied every available fix. The 44 remaining have no upstream fix to apply.
+
+## Frontend image (nginx-unprivileged:1.27-alpine + built site)
+BEFORE (no OS patching in the Dockerfile):
+$ trivy image --severity HIGH,CRITICAL --ignore-unfixed expensetrail-frontend
+  42 findings (2 CRITICAL + 40 HIGH), all in Alpine OS packages and ALL with a fix available -> the CI gate would have failed.
+FIX: add `USER root` / `RUN apk upgrade --no-cache` / `USER 101` to the final stage of application/frontend/Dockerfile.
+AFTER:
+$ trivy image --severity HIGH,CRITICAL --ignore-unfixed expensetrail-frontend
+  0 findings  -> the CI gate passes.
+$ docker run --rm --entrypoint id expensetrail-frontend -u
+  101      (still non-root)
+
+## Python dependencies (pip-audit), found and fixed before the images were built
+BEFORE: fastapi 0.115.6 pulled in starlette 0.41.3 -> "Found 14 known vulnerabilities" (PYSEC-2026-...)
+FIX:    fastapi==0.142.2 and an explicit starlette==1.7.0 pin in application/backend/requirements.txt (8/8 tests still pass)
+AFTER:  $ pip-audit -r application/backend/requirements.txt  ->  No known vulnerabilities found
+
+## What this means (for the presentation)
+Trivy scans an image layer by layer: the OS packages (apt/apk) and the language packages (pip/npm). Here every finding was in the OS layer
+inherited from the base image, none in our own Python or JavaScript dependencies. "Fixable" findings are patched by upgrading packages in the
+Dockerfile; "unfixed" ones cannot be fixed by us, so the gate ignores them (failing a build over something nobody can patch only teaches people to
+ignore the gate) while they stay visible in a plain `trivy image` run to be re-checked when the base image is rebuilt.
