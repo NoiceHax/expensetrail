@@ -1,0 +1,71 @@
+=== ExpenseTrail / Terraform (VPC + 2 public subnets + EKS), tested against LocalStack 4.9.2 ===
+minty@homelab, terraform v1.16.4, captured 2026-10-08 00:48 IST
+
+# LocalStack community has no EKS, so: the full plan (incl. EKS) is real; apply/destroy below cover the network only.
+
+$ terraform fmt -check -recursive
+(formatted)
+
+$ terraform init -plugin-dir=<local provider mirror>
+Terraform has been successfully initialized!
+
+$ terraform validate
+Success! The configuration is valid.
+
+
+$ terraform plan -var-file=localstack.tfvars -out=tfplan   # everything, including EKS
+  # aws_eks_cluster.main will be created
+  # aws_eks_node_group.main will be created
+  # aws_iam_role.cluster will be created
+  # aws_iam_role.node will be created
+  # aws_iam_role_policy_attachment.cluster will be created
+  # aws_iam_role_policy_attachment.node["arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"] will be created
+  # aws_iam_role_policy_attachment.node["arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"] will be created
+  # aws_iam_role_policy_attachment.node["arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"] will be created
+  # aws_internet_gateway.main will be created
+  # aws_route_table.public will be created
+  # aws_route_table_association.public[0] will be created
+  # aws_route_table_association.public[1] will be created
+  # aws_subnet.public[0] will be created
+  # aws_subnet.public[1] will be created
+  # aws_vpc.main will be created
+Plan: 15 to add, 0 to change, 0 to destroy.
+Changes to Outputs:
+
+## Network only: apply, verify, destroy
+$ terraform apply -var-file=localstack.tfvars -target=aws_route_table_association.public -auto-approve   # pulls in VPC, subnets, IGW and route table
+aws_vpc.main: Creation complete after 0s [id=vpc-8869820355cfe6693]
+aws_internet_gateway.main: Creation complete after 0s [id=igw-b24d5b415fb1df500]
+aws_route_table.public: Creation complete after 0s [id=rtb-2cb5ecbae6940020d]
+aws_subnet.public[1]: Creation complete after 10s [id=subnet-baa4b22b5b6bef893]
+aws_subnet.public[0]: Creation complete after 10s [id=subnet-ef8a2d952706fd668]
+aws_route_table_association.public[0]: Creation complete after 0s [id=rtbassoc-bb3f13c17a987d061]
+aws_route_table_association.public[1]: Creation complete after 0s [id=rtbassoc-2335019ff37f6d8b8]
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+
+$ terraform state list
+data.aws_availability_zones.available
+aws_internet_gateway.main
+aws_route_table.public
+aws_route_table_association.public[0]
+aws_route_table_association.public[1]
+aws_subnet.public[0]
+aws_subnet.public[1]
+aws_vpc.main
+
+$ awslocal ec2 describe-subnets (the two public subnets, different AZs)
+10.30.1.0/24	ap-south-1a	True
+10.30.2.0/24	ap-south-1b	True
+
+$ terraform destroy -var-file=localstack.tfvars -auto-approve
+aws_route_table_association.public[1]: Destruction complete after 0s
+aws_route_table_association.public[0]: Destruction complete after 1s
+aws_subnet.public[0]: Destruction complete after 0s
+aws_subnet.public[1]: Destruction complete after 0s
+aws_route_table.public: Destruction complete after 0s
+aws_internet_gateway.main: Destruction complete after 0s
+aws_vpc.main: Destruction complete after 0s
+Destroy complete! Resources: 7 destroyed.
+
+$ terraform state list   (empty = clean)
+(end)
