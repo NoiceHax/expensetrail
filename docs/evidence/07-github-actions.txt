@@ -1,0 +1,21 @@
+=== ExpenseTrail / CI/CD on GitHub Actions (NoiceHax/expensetrail, private repo) ===
+captured 2026-10-08 01:05 IST
+
+Run 37673948529 (commit c2eb39b): FAILED
+  This was the first push. The troubleshooting transcript in that history contained the base64 value of the Kubernetes Secret.
+  The pipeline's secret-scan gate most likely caused the failure (I did not open that run's log, so this is an inference).
+  What I did know before the push: a local gitleaks scan had reported "leaks found: 3" (I pushed anyway; my command did not stop on the result).
+  Fix: redacted the value in every commit (history rewritten, original commit dates kept), changed the script so it never prints Secret values,
+  confirmed with `gitleaks detect` that history is clean, then force-pushed to this private repo.
+
+Run 37674148129 (commit 1bd2200): ALL JOBS PASSED
+$ gh run view 37674148129 --json jobs   # job / conclusion
+  Backend tests (pytest): success
+  Frontend build (Vite): success
+  Helm chart lint and render: success
+  Security checks (SAST, SCA, secrets): success
+  Build, scan and push (backend): success
+  Build, scan and push (frontend): success
+
+Images are pushed to GHCR only on main, tagged with the commit SHA (ghcr.io/noicehax/expensetrail-backend:<sha> and -frontend:<sha>).
+The repository is private; make it public (or grant the grader access) before submitting.
