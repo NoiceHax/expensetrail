@@ -34,7 +34,8 @@ api_ok /api/summary
 
 echo "################ ISSUE 2: wrong database password (pods Running but never Ready)"
 OLD=$(k get secret expensetrail-db -o jsonpath='{.data.password}')
-run "k patch secret expensetrail-db -p '{\"data\":{\"password\":\"$(printf 'not-the-real-password' | base64)\"}}'"
+BADPW=$(printf 'not-the-real-password' | base64)
+echo "\$ kubectl patch secret expensetrail-db -p '{\"data\":{\"password\":\"<wrong password, base64>\"}}'"; k patch secret expensetrail-db -p "{\"data\":{\"password\":\"$BADPW\"}}"; echo
 run k rollout restart deploy/backend
 sleep 35
 echo "# SYMPTOM: READY 0/1 on the new pod, RESTARTS 0 (the process itself is fine)"; run k get pods -l app=backend
@@ -50,7 +51,7 @@ try:
     psycopg2.connect(os.environ['DATABASE_URL']); print('connected')
 except Exception as e: print(str(e).strip())\""
 echo "# ROOT CAUSE: the Secret no longer matches the password PostgreSQL was initialised with. FIX: restore the Secret, restart"
-run "k patch secret expensetrail-db -p '{\"data\":{\"password\":\"$OLD\"}}'"
+echo "\$ kubectl patch secret expensetrail-db -p '{\"data\":{\"password\":\"<original password, base64, not printed>\"}}'"; k patch secret expensetrail-db -p "{\"data\":{\"password\":\"$OLD\"}}"; echo
 run k rollout restart deploy/backend
 wait_ready backend; run k get pods -l app=backend
 api_ok /api/summary
