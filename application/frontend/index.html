@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ExpenseTrail</title>
+  </head>
+  <body>
+    <main class="wrap">
+      <header>
+        <h1>ExpenseTrail</h1>
+        <p class="sub">Track where the money goes.</p>
+      </header>
+
+      <section class="cards" id="summary" aria-live="polite"></section>
+
+      <section class="panel">
+        <h2>Add an expense</h2>
+        <form id="form">
+          <input name="title" placeholder="What was it?" required maxlength="120" />
+          <input name="amount" type="number" step="0.01" min="0.01" placeholder="Amount" required />
+          <select name="category">
+            <option>food</option><option>travel</option><option>bills</option>
+            <option>fun</option><option>other</option>
+          </select>
+          <input name="spent_on" type="date" />
+          <button type="submit">Add</button>
+        </form>
+        <p id="error" class="error" role="alert"></p>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <h2>Expenses</h2>
+          <select id="filter"><option value="">All categories</option></select>
+        </div>
+        <ul id="list" class="list"></ul>
+        <p id="empty" class="muted">No expenses yet. Add your first one above.</p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
