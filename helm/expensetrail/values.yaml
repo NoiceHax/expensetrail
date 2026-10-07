@@ -1,0 +1,39 @@
+image:
+  registry: ghcr.io/noicehax
+  backend: expensetrail-backend
+  frontend: expensetrail-frontend
+  tag: latest            # CI deploys the commit SHA: --set image.tag=<sha>
+  pullPolicy: IfNotPresent
+
+backend:
+  replicas: 2
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {memory: 256Mi}
+
+frontend:
+  replicas: 2
+  resources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {memory: 64Mi}
+
+postgres:
+  image: postgres:16-alpine
+  user: expense
+  database: expensetrail
+  storage: 500Mi
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+  # The password is never stored in Git: the chart generates one on first install and reuses it on upgrades.
+
+ingress:
+  enabled: true
+  className: nginx
+  host: expensetrail.local
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70

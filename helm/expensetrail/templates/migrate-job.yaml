@@ -1,0 +1,25 @@
+# Schema migrations run once per release as a hook, not in every backend replica (avoids two Pods racing to create the table).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: expensetrail-migrate
+  labels: {{- include "et.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 12          # on first install postgres may still be starting; retry until it answers
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: {{ include "et.image" (dict "root" . "name" .Values.image.backend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: expensetrail-db, key: password}}
+            - name: DATABASE_URL
+              value: postgresql://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@postgres:5432/{{ .Values.postgres.database }}

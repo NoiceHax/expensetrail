@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels: {{- include "et.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.backend.replicas }}
+  {{- end }}
+  selector:
+    matchLabels: {app: backend}
+  template:
+    metadata:
+      labels: {app: backend}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: backend
+          image: {{ include "et.image" (dict "root" . "name" .Values.image.backend) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - {name: http, containerPort: 8000}
+          env:
+            - {name: RUN_MIGRATIONS, value: "false"}   # the migrate Job owns the schema
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: expensetrail-db, key: password}}
+            - name: DATABASE_URL
+              value: postgresql://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@postgres:5432/{{ .Values.postgres.database }}
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities: {drop: [ALL]}
+          resources: {{- toYaml .Values.backend.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels: {{- include "et.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {app: backend}
+  ports:
+    - {name: http, port: 8000, targetPort: http}

@@ -1,0 +1,12 @@
+# small footprint for Minikube / laptops
+image:
+  registry: ""
+  backend: expensetrail-backend
+  frontend: expensetrail-frontend
+  tag: dev
+backend:
+  replicas: 2
+frontend:
+  replicas: 2
+autoscaling:
+  maxReplicas: 3
