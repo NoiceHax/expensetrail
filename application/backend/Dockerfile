@@ -18,5 +18,5 @@ RUN useradd --create-home --uid 10001 appuser
 USER 10001
 
 EXPOSE 8000
-# apply migrations, then start the API
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# compose: migrate on start. Kubernetes sets RUN_MIGRATIONS=false and runs a one-off migration Job instead.
+CMD ["sh", "-c", "if [ \"${RUN_MIGRATIONS:-true}\" = \"true\" ]; then alembic upgrade head; fi && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
