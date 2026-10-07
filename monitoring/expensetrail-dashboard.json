@@ -134,7 +134,7 @@
    "targets": [
     {
      "refId": "A",
-     "expr": "count(up{job=\"kubernetes-pods\", kubernetes_namespace=\"expensetrail\"} == 1)"
+     "expr": "count(up{job=\"kubernetes-pods\", namespace=\"expensetrail\"} == 1)"
     }
    ],
    "fieldConfig": {
