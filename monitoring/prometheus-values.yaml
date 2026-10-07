@@ -1,0 +1,20 @@
+# helm install prometheus prometheus-community/prometheus -n monitoring -f monitoring/prometheus-values.yaml
+# Trimmed to what this project needs (the server + the built-in pod discovery): small enough for a laptop cluster.
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+server:
+  global:
+    scrape_interval: 15s
+  persistentVolume:
+    enabled: false
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 384Mi}
+# The chart's "kubernetes-pods" job scrapes any Pod annotated prometheus.io/scrape=true
+# (the backend Deployment carries prometheus.io/path=/metrics and prometheus.io/port=8000).
