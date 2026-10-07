@@ -1,0 +1,95 @@
+=== ExpenseTrail / docker compose stack ===
+minty@homelab, captured 2026-10-08 00:02 IST
+
+$ docker compose -f docker/docker-compose.yml up -d --build   (host ports 3100/8100 because 3000/8000 are used on this machine)
+$ docker compose -f docker/docker-compose.yml ps
+SERVICE    STATUS                    PORTS
+backend    Up 17 seconds (healthy)   0.0.0.0:8100->8000/tcp, [::]:8100->8000/tcp
+frontend   Up 11 seconds             0.0.0.0:3100->8080/tcp, [::]:3100->8080/tcp
+postgres   Up 24 seconds (healthy)   5432/tcp
+
+$ curl localhost:8100/health
+{"status":"ok"}
+
+$ curl localhost:8100/ready   # database reachable
+{"status":"ready"}
+
+## Through the frontend container (nginx proxies /api to the backend):
+$ curl -X POST localhost:3100/api/expenses -d '{"title":"Chai","amount":40,"category":"food"}'
+{"title":"Chai","amount":40.0,"category":"food","spent_on":"2026-10-07","id":1}
+$ curl -X POST localhost:3100/api/expenses -d '{"title":"Metro pass","amount":500,"category":"travel"}'
+{"title":"Metro pass","amount":500.0,"category":"travel","spent_on":"2026-10-07","id":2}
+$ curl -X POST localhost:3100/api/expenses -d '{"title":"Internet bill","amount":999,"category":"bills"}'
+{"title":"Internet bill","amount":999.0,"category":"bills","spent_on":"2026-10-07","id":3}
+$ curl -X POST localhost:3100/api/expenses -d '{"title":"Dinner","amount":420.5,"category":"food"}'
+{"title":"Dinner","amount":420.5,"category":"food","spent_on":"2026-10-07","id":4}
+
+$ curl localhost:3100/api/summary
+{
+    "total": 1959.5,
+    "count": 4,
+    "by_category": [
+        {
+            "category": "bills",
+            "total": 999.0,
+            "count": 1
+        },
+        {
+            "category": "travel",
+            "total": 500.0,
+            "count": 1
+        },
+        {
+            "category": "food",
+            "total": 460.5,
+            "count": 2
+        }
+    ]
+}
+
+$ curl -X PUT localhost:3100/api/expenses/1 ...  (update)
+{"title":"Chai and samosa","amount":65.0,"category":"food","spent_on":"2026-10-07","id":1}
+
+$ curl -X DELETE localhost:3100/api/expenses/2 -o /dev/null -w "%{http_code}"
+204
+
+$ curl "localhost:3100/api/expenses?category=food"
+[
+    {
+        "title": "Dinner",
+        "amount": 420.5,
+        "category": "food",
+        "spent_on": "2026-10-07",
+        "id": 4
+    },
+    {
+        "title": "Chai and samosa",
+        "amount": 65.0,
+        "category": "food",
+        "spent_on": "2026-10-07",
+        "id": 1
+    }
+]
+
+$ curl localhost:8100/metrics | grep expensetrail   # Prometheus format
+expensetrail_http_requests_total{method="GET",path="/ready",status="200"} 5.0
+expensetrail_http_requests_total{method="GET",path="/health",status="200"} 1.0
+expensetrail_http_requests_total{method="POST",path="/api/expenses",status="201"} 4.0
+expensetrail_http_requests_total{method="GET",path="/api/summary",status="200"} 1.0
+expensetrail_http_requests_total{method="PUT",path="/api/expenses/{expense_id}",status="200"} 1.0
+expensetrail_http_requests_total{method="DELETE",path="/api/expenses/{expense_id}",status="204"} 1.0
+expensetrail_http_requests_total{method="GET",path="/api/expenses",status="200"} 1.0
+expensetrail_http_request_seconds_count{method="GET",path="/ready"} 5.0
+
+## Non-root check (uid inside each container)
+backend uid: 10001
+frontend uid: 101
+
+## Alembic created the table (PostgreSQL):
+             List of relations
+ Schema |      Name       | Type  |  Owner  
+--------+-----------------+-------+---------
+ public | alembic_version | table | expense
+ public | expenses        | table | expense
+(2 rows)
+
