@@ -2,8 +2,7 @@
 
 - `presentation.pptx` — slide deck (10 slides: overview, stack, architecture,
   CI/CD, infrastructure, Kubernetes/GitOps, observability, security, learnings).
-- Presentation video (`walkthrough.mp4`) — to be recorded and placed here before
-  submission. Required walkthrough order per GRADING.md M10:
+- `walkthrough.mp4` — presentation video. Walkthrough order per GRADING.md M10:
   1. PPT slides (what was built, architecture overview)
   2. Live: push → GitHub Actions run end-to-end
   3. Codebase overview (folder structure, key files)
