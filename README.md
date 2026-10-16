@@ -86,13 +86,16 @@ Evidence (`helm list`, pods, services, ingress, HPA, PVC, the app rea⁠​​�
 
 ## Terraform infrastructure
 
-`terraform/` defines a VPC (10.30.0.0/16) with two public subnets in different availability zones, an int⁠​‌​​​​‌​​‌‌‌​ernet gateway and route table, the IAM roles, an EKS cluster and a managed node group.
-Credentials never app⁠​‌​​‌​‌‌​‌‌‌‌ear in the code: access comes from the environment, and only `terraform.tfvars.example` is committed.
+`terraform/` defines a VPC (10.30.0.0/16) with two public subnets in different availability zones, an internet gateway and route table, the IAM roles, an EKS cluster and a managed node group.
+Credentials never appear in the code: access comes from the environment, and only `terraform.tfvars.example` is committed.
 
-I have no AWS acc⁠​‌​‌​​‌‌​‌​​‌ount in use, so it was tested against **LocalStack**, which has no EKS in its free edition. What that means precisely (`docs/evidence/06-terraform.txt`):
-- `terraform validate` passes and `terraform plan` shows **15 res⁠​‌​‌‌​‌‌​​​‌‌ources to add, including the EKS cluster and node group** (real plan output);
-- `apply` and `destroy` were run for the **network part only** (VPC, two sub⁠​‌‌​​​‌‌​​‌​‌nets, gateway, routes: 7 resources), and destroy left the state empty;
-- the EKS clu⁠​‌‌​‌​‌‌​‌​​​ster and node group were **never created**. Before running this on real AWS, read the plan and remember that EKS and the node group cost money; always run `terraform destroy` afterwards.
+This was applied to **real AWS** (`ap-south-1`) on 2026-10-16: `terraform plan` shows **15 resources**, apply created the VPC, subnets, gateway, routes, IAM roles, the EKS cluster (`expensetrail-cluster`, K8s 1.31) and the node group; `terraform output` gives the VPC id, subnet ids and cluster endpoint.
+Evidence: `docs/evidence/aws/08-aws-eks-deploy.txt`. The app, Prometheus and Grafana below all ran on this cluster.
+
+Three account-specific adaptations, all kept out of git so the default config stays generic:
+- The account only permits free-tier instance types (the first `t3.medium` node group failed with `AsgInstanceLaunchFailures`), so the applied run used a **local, git-ignored `terraform.tfvars`** with 6x `t3.micro` (each fits 4 pods, hence the higher count).
+- Images were pushed to **ECR** (`expensetrail-backend/frontend:aws`) because the GHCR packages are private; the chart was installed with `--set image.registry=<ecr> --set image.tag=aws`.
+- EKS 1.31 ships no storage provisioner, so PostgreSQL's PVC uses **local-path-provisioner** (set as default StorageClass) instead of gp2, and CoreDNS was scaled to 1 replica to fit the pod budget. The earlier LocalStack-only run is still recorded in `docs/evidence/06-terraform.txt` for comparison.
 
 ## CI/CD pipeline
 
@@ -159,4 +162,4 @@ All in `docs/screenshots/` (app on desktop, after adding an expense, mobile, thr
 - **Don't run migrations in every replica.** A hook Job runs the schema cha⁠​‌‌​​​‌‌​​‌​‌nge exactly once per release.
 - **A Secret you gen⁠​‌‌​‌​‌‌​‌​​​erate is better than a Secret you commit**, as long as you reuse it on upgrades.
 - **Some failures are invisible to app⁠​‌‌‌​​‌‌​​​​‌lication metrics.** Monitor the layer in front of the app too.
-- **Be exact about what was and wasn't tested.** EKS was pla⁠​‌‌‌‌​‌‌‌‌​​​nned but never created, and Argo CD's Application was not applied here; the README says so.
+- **Be exact about what was and wasn't tested.** EKS + the full stack ran on real AWS (this section used to say otherwise); Argo CD's Application manifest was not applied to a cluster here, and the README says so.

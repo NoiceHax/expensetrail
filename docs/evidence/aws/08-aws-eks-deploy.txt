@@ -1,0 +1,60 @@
+=== terraform outputs (real AWS, ap-south-1) ===
+
+Warning: No outputs found
+
+The state file either has no outputs defined, or all the defined outputs are
+empty. Please define an output in your configuration with the `output`
+keyword and run `terraform refresh` for it to become available. If you are
+using interpolation, please verify the interpolated value is not empty. You
+can use the `terraform console` command to assist.
+
+=== kubectl get nodes ===
+NAME                                         STATUS   ROLES    AGE   VERSION
+ip-10-30-1-181.ap-south-1.compute.internal   Ready    <none>   30m   v1.31.14-eks-b9510e3
+ip-10-30-1-27.ap-south-1.compute.internal    Ready    <none>   27m   v1.31.14-eks-b9510e3
+ip-10-30-1-88.ap-south-1.compute.internal    Ready    <none>   27m   v1.31.14-eks-b9510e3
+ip-10-30-2-204.ap-south-1.compute.internal   Ready    <none>   27m   v1.31.14-eks-b9510e3
+ip-10-30-2-210.ap-south-1.compute.internal   Ready    <none>   30m   v1.31.14-eks-b9510e3
+ip-10-30-2-93.ap-south-1.compute.internal    Ready    <none>   27m   v1.31.14-eks-b9510e3
+
+=== helm list ===
+NAME          	NAMESPACE    	REVISION	UPDATED                                	STATUS  	CHART                	APP VERSION
+expensetrail  	expensetrail 	1       	2026-10-16 23:04:02.526637642 +0530 IST	deployed	expensetrail-0.1.0   	1.0.0      
+grafana       	monitoring   	1       	2026-10-16 23:08:10.71738843 +0530 IST 	failed  	grafana-10.5.15      	12.3.1     
+ingress-nginx 	ingress-nginx	1       	2026-10-16 23:00:26.928728994 +0530 IST	deployed	ingress-nginx-4.15.1 	1.15.1     
+metrics-server	kube-system  	1       	2026-10-16 23:05:58.119623975 +0530 IST	deployed	metrics-server-3.14.0	0.9.0      
+prometheus    	monitoring   	1       	2026-10-16 23:07:15.038449278 +0530 IST	deployed	prometheus-29.37.0   	v3.15.0    
+
+=== expensetrail ===
+NAME                            READY   STATUS    RESTARTS   AGE
+pod/backend-5cc77cbb48-dkf47    1/1     Running   0          22m
+pod/backend-5cc77cbb48-mkvrr    1/1     Running   0          22m
+pod/frontend-79ff775487-s2zwr   1/1     Running   0          22m
+pod/frontend-79ff775487-s6vqb   1/1     Running   0          22m
+pod/postgres-5497657c75-f4hw7   1/1     Running   0          22m
+
+NAME               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+service/backend    ClusterIP   172.20.71.157   <none>        8000/TCP   22m
+service/frontend   ClusterIP   172.20.231.51   <none>        80/TCP     22m
+service/postgres   ClusterIP   172.20.56.224   <none>        5432/TCP   22m
+
+NAME                                     CLASS   HOSTS                ADDRESS                                                                   PORTS   AGE
+ingress.networking.k8s.io/expensetrail   nginx   expensetrail.local   a1b73eb76dc2449f5b9b6851c42545a9-644456775.ap-south-1.elb.amazonaws.com   80      22m
+
+NAME                                          REFERENCE            TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+horizontalpodautoscaler.autoscaling/backend   Deployment/backend   cpu: 4%/70%   2         3         2          22m
+
+=== ECR images ===
+None	sha256:25c8682a4533c89f0adb8c8b5316ddfc537206560b238bcccebeaadafcbb5990
+None	sha256:51475afb2514ca92f8703c2fc39183639847fce73fc7764b26d792057a1ce0cf
+aws	sha256:1e4905786abe6f326901ef64eaf1cc0541abaf6d26f3bf78c99ff82159c5095b
+None	sha256:525f99fc43401bdfd57e47a2de706efc242e2c04455eb18dd3e323fe0ef92507
+None	sha256:afe05be60ea9875ed9c80d405ce8c51ea3c5b7c8f8b8e20aed06ea5f619e7f86
+aws	sha256:109ce553511139afb2acc38156c53e78c547da5d4cb41a1b87a0fd4a003ccb37
+
+=== terraform state list (15 managed resources) ===
+[31mNo state file was found!
+
+State management commands require a state file. Run this command
+in a directory where Terraform has been run or use the -state flag
+to point the command to a specific state location.[0m[0m

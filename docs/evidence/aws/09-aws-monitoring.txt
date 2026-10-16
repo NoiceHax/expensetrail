@@ -1,0 +1,15 @@
+=== prometheus targets UP count ===
+total targets: 18
+UP: 18
+
+=== app request total ===
+[{'metric': {}, 'value': [1792173354.727, '949']}]
+
+=== grafana health ===
+{
+  "database": "ok",
+  "version": "12.3.1",
+  "commit": "3a1c80ca7ce612f309fdc99338dd3c5e486339be"
+}
+=== ingress ELB ===
+a1b73eb76dc2449f5b9b6851c42545a9-644456775.ap-south-1.elb.amazonaws.com
