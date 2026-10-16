@@ -1,0 +1,15 @@
+=== terraform destroy (2026-10-16, ap-south-1) ===
+Destroy complete! Resources: 15 destroyed.
+
+=== post-destroy account check ===
+eks clusters: []
+running instances: none
+vpcs: default only (vpc-039a8a4f0f16126d8 172.31.0.0/16)
+load balancers: 0
+ecr repositories: []
+terraform state: empty
+
+Manually removed (created outside terraform):
+- ECR repos expensetrail-backend + expensetrail-frontend (deleted)
+- IAM role expensetrail-ebs-csi (detached + deleted)
+- OIDC provider for the cluster (deleted)
